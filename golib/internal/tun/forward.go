@@ -80,10 +80,10 @@ func setTCPOptions(s *stack.Stack, ep tcpip.Endpoint) {
 
 	var ss tcpip.TCPSendBufferSizeRangeOption
 	if err := s.TransportProtocolOption(header.TCPProtocolNumber, &ss); err == nil {
-		ep.SocketOptions().SetSendBufferSize(int64(ss.Default), false)
+		ep.SocketOptions().SetSendBufferSize(4<<20, false)
 	}
 	var rs tcpip.TCPReceiveBufferSizeRangeOption
 	if err := s.TransportProtocolOption(header.TCPProtocolNumber, &rs); err == nil {
-		ep.SocketOptions().SetReceiveBufferSize(int64(rs.Default), false)
+		ep.SocketOptions().SetReceiveBufferSize(4<<20, false)
 	}
 }

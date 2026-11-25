@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"strings"
 	"io"
 	"math"
 	"math/rand/v2"
@@ -251,12 +252,12 @@ func (s *Scheduler) Tick(dt time.Duration) {
 			sl.lastIn[f], sl.lastOut[f] = in, out
 			r := sl.rateIn[f] + sl.rateOut[f]
 			if r >= 0.05*sl.peak[f] {
-				sl.peak[f] = math.Max(r, sl.peak[f]*0.97)
+				sl.peak[f] = math.Max(r, sl.peak[f]*0.92)
 			} else {
 				idle[sl] = true
 			}
 			if sl.rateOut[f] >= 0.05*sl.peakUp[f] {
-				sl.peakUp[f] = math.Max(sl.rateOut[f], sl.peakUp[f]*0.97)
+				sl.peakUp[f] = math.Max(sl.rateOut[f], sl.peakUp[f]*0.92)
 			}
 			if !sl.present || sl.ip(f) == nil {
 				continue
@@ -269,7 +270,7 @@ func (s *Scheduler) Tick(dt time.Duration) {
 		// re-measured too.
 		for _, sl := range s.slots {
 			if sl.present && sl.ip(f) != nil && sl.peakUp[f] > 0 && sl.rateOut[f] < 0.05*sl.peakUp[f] {
-				sl.peakUp[f] = math.Min(sl.peakUp[f]*1.03, math.Max(sl.peakUp[f], 0.5*maxUp))
+				sl.peakUp[f] = math.Min(sl.peakUp[f]*1.06, math.Max(sl.peakUp[f], 0.5*maxUp))
 			}
 		}
 		// An idle NIC's old estimate may be stale or pessimistic (it was measured during a bad
@@ -277,7 +278,7 @@ func (s *Scheduler) Tick(dt time.Duration) {
 		// up, capped at half of the best NIC, so it keeps getting a fair chance to be re-measured.
 		for sl := range idle {
 			if sl.present && sl.ip(f) != nil && sl.peak[f] > 0 {
-				sl.peak[f] = math.Min(sl.peak[f]*1.03, math.Max(sl.peak[f], 0.5*maxPeak))
+				sl.peak[f] = math.Min(sl.peak[f]*1.06, math.Max(sl.peak[f], 0.5*maxPeak))
 			}
 		}
 		for _, sl := range s.slots {
@@ -479,4 +480,29 @@ func (s *Scheduler) Snapshot() []SlotStats {
 		out = append(out, st)
 	}
 	return out
+}
+
+// AcquirePreferred picks a healthy NIC whose name starts with prefix (e.g. "Wi-Fi"),
+// falling back to AcquireFor if none is available.
+func (s *Scheduler) AcquirePreferred(f Family, prefix string, skip map[string]struct{}) *Slot {
+s.mu.Lock()
+now := s.now()
+for _, sl := range s.slots {
+if !sl.present || sl.ip(f) == nil || !strings.HasPrefix(sl.Name, prefix) {
+continue
+}
+if _, no := skip[sl.key]; no {
+continue
+}
+if now.Before(sl.downUntil[f]) || sl.state[f] == stateDown {
+continue
+}
+sl.active.Add(1)
+sl.actF[f].Add(1)
+sl.total.Add(1)
+s.mu.Unlock()
+return sl
+}
+s.mu.Unlock()
+return s.AcquireFor(f, skip)
 }

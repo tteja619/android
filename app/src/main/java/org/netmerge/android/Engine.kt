@@ -28,6 +28,9 @@ object Engine {
     private val _evenSplit = MutableStateFlow(false)
     val evenSplit: StateFlow<Boolean> = _evenSplit.asStateFlow()
 
+    private val _bypassedApps = MutableStateFlow<Set<String>>(emptySet())
+    val bypassedApps: StateFlow<Set<String>> = _bypassedApps.asStateFlow()
+
     val running: Boolean get() = _phase.value == Phase.ON
 
     internal fun setPhase(p: Phase) {
@@ -55,6 +58,7 @@ object Engine {
 
     fun loadSettings(ctx: Context) {
         _evenSplit.value = prefs(ctx).getBoolean("even_split", false)
+        _bypassedApps.value = prefs(ctx).getStringSet("bypassed_apps", emptySet())?.toSet() ?: emptySet()
         applySettings()
     }
 
@@ -62,6 +66,13 @@ object Engine {
         prefs(ctx).edit().putBoolean("even_split", on).apply()
         _evenSplit.value = on
         applySettings()
+    }
+
+    fun toggleBypassApp(ctx: Context, pkg: String) {
+        val next = _bypassedApps.value.toMutableSet()
+        if (!next.add(pkg)) next.remove(pkg)
+        prefs(ctx).edit().putStringSet("bypassed_apps", next).apply()
+        _bypassedApps.value = next
     }
 
     private fun applySettings() {

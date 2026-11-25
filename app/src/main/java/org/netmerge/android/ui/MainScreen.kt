@@ -39,6 +39,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import android.content.Intent
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -65,6 +77,8 @@ fun MainScreen(
     evenSplit: Boolean,
     onToggle: () -> Unit,
     onEvenSplit: (Boolean) -> Unit,
+    bypassedApps: Set<String> = emptySet(),
+    onToggleBypass: (String) -> Unit = {},
 ) {
     val p = LocalPalette.current
     Box(
@@ -109,6 +123,8 @@ fun MainScreen(
             }
             Spacer(Modifier.height(14.dp))
             SettingsCard(evenSplit, onEvenSplit)
+            Spacer(Modifier.height(14.dp))
+            BypassAppsCard(phase, bypassedApps, onToggleBypass)
             Spacer(Modifier.height(18.dp))
             Text(
                 "Android port of net-merge by Rohit Mahto · MIT",
@@ -342,5 +358,89 @@ private fun SettingsCard(evenSplit: Boolean, onEvenSplit: (Boolean) -> Unit) {
                 colors = SwitchDefaults.colors(checkedTrackColor = p.good),
             )
         }
+    }
+}
+
+@Composable
+private fun BypassAppsCard(
+    phase: Engine.Phase,
+    bypassedApps: Set<String>,
+    onToggleBypass: (String) -> Unit,
+) {
+    val p = LocalPalette.current
+    val ctx = LocalContext.current
+    var showDialog by remember { mutableStateOf(false) }
+
+    Card {
+        Row(
+            Modifier.fillMaxWidth().clickable { showDialog = true },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Bypass VPN for apps", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                Text(
+                    if (bypassedApps.isEmpty()) "Exclude banking, UPI, calls, or games from merging"
+                    else "${bypassedApps.size} app(s) excluded" + if (phase == Engine.Phase.ON) " · reconnect to apply" else "",
+                    color = p.muted, fontSize = 13.sp, lineHeight = 18.sp,
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Text("Edit", color = p.wifi, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+        }
+    }
+
+    if (showDialog) {
+        val apps = remember {
+            val pm = ctx.packageManager
+            val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+            pm.queryIntentActivities(intent, 0)
+                .map { it.activityInfo.packageName to it.loadLabel(pm).toString() }
+                .distinctBy { it.first }
+                .filter { it.first != ctx.packageName }
+                .sortedBy { it.second.lowercase() }
+        }
+        var query by remember { mutableStateOf("") }
+        val filtered = remember(query, apps) {
+            if (query.isBlank()) apps
+            else apps.filter { it.second.contains(query, ignoreCase = true) || it.first.contains(query, ignoreCase = true) }
+        }
+
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            title = { Text("Bypass VPN for apps") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        placeholder = { Text("Search apps...") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    LazyColumn(Modifier.height(340.dp)) {
+                        items(filtered, key = { it.first }) { (pkg, label) ->
+                            Row(
+                                Modifier.fillMaxWidth().clickable { onToggleBypass(pkg) }.padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Checkbox(
+                                    checked = pkg in bypassedApps,
+                                    onCheckedChange = { onToggleBypass(pkg) },
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Column {
+                                    Text(label, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                    Text(pkg, fontSize = 11.sp, color = p.muted)
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showDialog = false }) { Text("Done") }
+            },
+        )
     }
 }

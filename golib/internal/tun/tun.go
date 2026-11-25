@@ -38,6 +38,9 @@ func (p tunProxy) DialUDP(m *M.Metadata) (net.PacketConn, error) {
 	if d := m.DstIP.Unmap(); d.Is6() {
 		f = engine.Fam6
 	}
+	if m.DstPort == 53 {
+		return p.b.ListenUDPPrefer(context.Background(), f, "Wi-Fi")
+	}
 	return p.b.ListenUDP(context.Background(), f)
 }
 

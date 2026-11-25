@@ -68,6 +68,7 @@ jobs:
   # Real screenshots for the README, taken on an emulator that has both Wi-Fi and mobile data.
   screenshots:
     needs: apk
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -106,6 +106,9 @@ class MergeVpnService : VpnService() {
                     this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE,
                 ),
             )
+        for (pkg in Engine.bypassedApps.value) {
+            runCatching { builder.addDisallowedApplication(pkg) }
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) builder.setMetered(false)
         if (nets.isNotEmpty()) builder.setUnderlyingNetworks(nets.map { it.network }.toTypedArray())
         // IPv6: a ULA so apps still prefer IPv4 on dual-stack sites (see upstream tun.go).

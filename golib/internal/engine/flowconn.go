@@ -109,3 +109,33 @@ func (b *Balancer) ListenUDP(ctx context.Context, f Family) (net.PacketConn, err
 		return spc, nil
 	}
 }
+
+// ListenUDPPrefer opens a UDP socket preferring NICs matching prefix (used for Wi-Fi-pinned DNS).
+func (b *Balancer) ListenUDPPrefer(ctx context.Context, f Family, prefix string) (net.PacketConn, error) {
+network := "udp4"
+if f == Fam6 {
+network = "udp6"
+}
+tried := map[string]struct{}{}
+lastErr := errors.New("no usable network adapter")
+for {
+sl := b.S.AcquirePreferred(f, prefix, tried)
+if sl == nil {
+return nil, lastErr
+}
+tried[sl.key] = struct{}{}
+lc := net.ListenConfig{Control: nics.ForceEgress(sl.Index, f == Fam6)}
+pc, err := lc.ListenPacket(ctx, network, net.JoinHostPort(sl.ip(f).String(), "0"))
+b.S.ReleaseFor(sl, f)
+if err != nil {
+if classify(err).linkDown {
+b.S.Fail(sl, f, b.FailCooldown)
+}
+lastErr = err
+continue
+}
+spc := &slotPacketConn{PacketConn: pc, sl: sl, fam: f}
+sl.conns.Store(spc, struct{}{})
+return spc, nil
+}
+}
